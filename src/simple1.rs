@@ -2,18 +2,40 @@ use crate::math::{vec2, Vec2};
 
 // Map is intended for stuff that does not move nor update and it is optimized to be retrieved by position ie. a grid of size x size (water, walls, floors, doors?)
 struct Map {
-    size: u32,
+    size: usize,
+    map: Vec<MapClass>,
 }
 
 impl Map {
-    fn new(size: u32) -> Self {
-        Map { size }
+    fn new(size: usize) -> Self {
+        let map = Vec::with_capacity(size * size);
+        Map { size, map }
+    }
+
+    fn class_at(&self, pos: Vec2) -> Option<MapClass> {
+        todo!()
     }
 
     // Check if a position can be occupied by an Entity ie. maybe there's a wall there?
     fn validate_move(&self, pos: Vec2) -> bool {
-        true
+        if let Some(class) = self.class_at(pos) {
+            match class {
+                MapClass::Wall | MapClass::ClosedDoor | MapClass::None => false,
+                _ => true,
+            }
+        } else {
+            true
+        }
     }
+}
+
+enum MapClass {
+    None,
+    Water,
+    Floor,
+    Wall,
+    ClosedDoor,
+    OpenDoor,
 }
 
 #[derive(Clone, Copy)]
@@ -122,7 +144,7 @@ impl Game {
                 map_pos,
                 strength,
             } => {
-                // We are &mut self so map is mut and we can change it as we like
+                // We are &mut self so map is mut and we can change it as we like ie. change a Wall into a Floor or into a DestroyedWall
                 todo!()
             }
         }
@@ -157,6 +179,45 @@ impl Game {
         // If that is a necessity then sommething else needs to be used (Generational Indices, maps etc)
 
         // Keep running if there are at least 2 entities alive
+        self.entities.len() > 1
+    }
+
+    // An alternative way to update entities is by using indices everywhere
+    // Pros:
+    // - everything can be done in one pass, including map alternations
+    // Cons:
+    // - very error prone and verbose with self.entities[x] everywhere
+    // - impossible to execute in parallel
+    // - the entire Entity update logic goes in this func
+    fn update_indexed(&mut self) -> bool {
+        for i in 0..self.entities.len() {
+            match self.entities[i].class {
+                // These 2 consts could be coming from the PlayerData
+                EntityClass::Player(player) => {
+                    const ATTACK_DISTANCE: f32 = 2.0;
+                    const MY_ATTACK_STRENGTH: f32 = 0.25;
+
+                    // Do bad things to other entities
+                    for ei in 0..self.entities.len() {
+                        // Check it's not me
+                        if i != ei {
+                            if self.entities[i].pos.distance(self.entities[ei].pos)
+                                < ATTACK_DISTANCE
+                            {
+                                // Just do it
+                                self.entities[ei].health -= MY_ATTACK_STRENGTH;
+                            }
+                        }
+                    }
+                }
+                EntityClass::Monster(_) => todo!(),
+                EntityClass::Item(_) => todo!(),
+            }
+        }
+
+        // Last step, kill entities.
+        self.entities.retain(|e| e.health <= 0.0);
+
         self.entities.len() > 1
     }
 }
